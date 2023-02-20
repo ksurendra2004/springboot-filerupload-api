@@ -1,5 +1,6 @@
 package com.fileuploadapi.controller;
 
+import com.fileuploadapi.exception.FileException;
 import com.fileuploadapi.model.ResponseModel;
 import com.fileuploadapi.service.FileService;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
@@ -28,10 +30,19 @@ public class FileController {
         if (file.isEmpty())
             return ResponseEntity.status(HttpStatus.NO_CONTENT).body(new ResponseModel("Please select a file to upload"));
         try {
+            String fileName = file.getOriginalFilename();
             fileService.uploadFile(file);
 
-            message = "Uploaded the file successfully: " + file.getOriginalFilename();
-            return ResponseEntity.status(HttpStatus.OK).body(new ResponseModel(message));
+            /*String fileDownloadUri = ServletUriComponentsBuilder.fromCurrentContextPath()
+                    .path("/download/")
+                    .path(fileName)
+                    .toUriString();*/
+            ResponseModel responseModel = new ResponseModel();
+            responseModel.setFileName(fileName);
+            responseModel.setSize(file.getSize());
+            responseModel.setDownloadUri("/download/"+fileName); //fileDownloadUri  - for complete url
+            responseModel.setMessage("SUCCESS");
+            return ResponseEntity.status(HttpStatus.OK).body(responseModel);
         } catch (Exception e) {
             message = "Could not upload the file: " + file.getOriginalFilename() + ". Error: " + e.getMessage();
             return ResponseEntity.status(HttpStatus.EXPECTATION_FAILED).body(new ResponseModel(message));
@@ -43,19 +54,19 @@ public class FileController {
         // Load file as Resource
         Resource file = fileService.downloadFile(filename);
 
-        //String contentType = request.getServletContext().getMimeType(file.getFile().getAbsolutePath());
         String contentType = null;
         try {
             contentType = request.getServletContext().getMimeType(file.getFile().getAbsolutePath());
-        } catch (IOException ex) {
-            log.info("Could not determine file type.");
-        }
 
-        // Fallback to the default content type if type could not be determined
-        if(contentType == null) {
-            contentType = "application/octet-stream";
+            // Fallback to the default content type if type could not be determined
+            if(contentType == null) {
+                contentType = "application/octet-stream";
+            }
+            log.info("file: {}, file name: {}", file, file.getFilename());
+        } catch (Exception ex) {
+            log.info("Could not determine file type.");
+            throw new FileException("Could not determine file type: " + ex);
         }
-        log.info("file: {}, file name: {}", file, file.getFilename());
 
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(contentType))
